@@ -151,6 +151,7 @@ services:
               total_time INT DEFAULT 60 COMMENT '考试时长(分钟)',
               question_count INT NOT NULL COMMENT '题目数量',
               type ENUM('fixed', 'random') DEFAULT 'fixed' COMMENT '出题方式: fixed-固定 random-随机',
+              identity_check_enabled TINYINT(1) DEFAULT 1 COMMENT '进入考试是否要求证件+人脸核验: 1-是 0-否',
               status TINYINT(1) DEFAULT 1 COMMENT '状态: 1-启用 0-禁用',
               created_by BIGINT UNSIGNED COMMENT '创建人ID',
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -226,6 +227,49 @@ services:
               `owner` VARCHAR(255) NOT NULL,
               `expiration` INT NOT NULL
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Laravel缓存锁表';
+
+          CREATE TABLE IF NOT EXISTS identity_verifications (
+              id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              user_id BIGINT UNSIGNED NOT NULL COMMENT '考生ID',
+              exam_paper_id BIGINT UNSIGNED NOT NULL COMMENT '试卷ID（材料仅限本次考试使用）',
+              exam_record_id BIGINT UNSIGNED NULL COMMENT '关联的考试记录ID',
+              id_card_no_encrypted TEXT NULL COMMENT '证件号码(AES加密存储)',
+              id_card_name VARCHAR(50) NULL COMMENT '证件姓名',
+              id_card_path VARCHAR(255) NULL COMMENT '证件照私有存储路径(非公开目录)',
+              live_photo_path VARCHAR(255) NULL COMMENT '摄像头人脸照私有存储路径',
+              match_score DECIMAL(5,2) NULL COMMENT '人脸比对得分0-100',
+              match_detail VARCHAR(500) NULL COMMENT '比对引擎与原始指标',
+              status ENUM('passed','suspected','failed') NOT NULL COMMENT '机器判定: passed-通过 suspected-疑似 failed-失败',
+              attempt_number INT NOT NULL DEFAULT 1 COMMENT '第几次提交',
+              reviewed_by BIGINT UNSIGNED NULL COMMENT '人工复核监考老师ID',
+              reviewed_at TIMESTAMP NULL COMMENT '人工复核时间',
+              review_result ENUM('approved','rejected') NULL COMMENT '人工复核结果',
+              review_remark VARCHAR(500) NULL COMMENT '复核备注',
+              expires_at TIMESTAMP NULL COMMENT '保留期到期时间(考试结束+保留天数)',
+              purged_at TIMESTAMP NULL COMMENT '材料实际清理(匿名化)时间',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              INDEX idx_iv_user_paper (user_id, exam_paper_id),
+              INDEX idx_iv_status_review (status, review_result),
+              INDEX idx_iv_expires (expires_at, purged_at),
+              INDEX idx_iv_record (exam_record_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='考试证件与人脸核验记录表';
+
+          CREATE TABLE IF NOT EXISTS identity_review_logs (
+              id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              identity_verification_id BIGINT UNSIGNED NOT NULL COMMENT '核验记录ID',
+              operator_id BIGINT UNSIGNED NULL COMMENT '操作人ID(系统清理时为空)',
+              action ENUM('submit','view_id_card','view_live_photo','approve','reject','purge') NOT NULL COMMENT '操作类型',
+              detail VARCHAR(1000) NULL COMMENT '操作详情/备注',
+              ip VARCHAR(45) NULL COMMENT '操作IP',
+              user_agent VARCHAR(500) NULL COMMENT 'UA',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              INDEX idx_irl_verification (identity_verification_id),
+              INDEX idx_irl_operator (operator_id),
+              INDEX idx_irl_action (action),
+              INDEX idx_irl_created (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='核验材料查看与人工复核审计日志表';
           SQL
 
           echo "Database initialized from inline schema."
@@ -238,6 +282,16 @@ services:
       dockerfile: Dockerfile
     container_name: exam-backend
     restart: unless-stopped
+    entrypoint:
+      - sh
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          if php artisan identity:ensure-schema; then break; fi
+          echo "waiting for database... ($$i)"
+          sleep 2
+        done
+        exec php artisan serve --host=0.0.0.0 --port=8080
     environment:
       APP_NAME: ExamSystem
       APP_ENV: local
@@ -254,6 +308,12 @@ services:
       CACHE_DRIVER: file
       SESSION_DRIVER: file
       QUEUE_CONNECTION: sync
+      IDENTITY_FACE_DRIVER: local
+      IDENTITY_PASS_THRESHOLD: 80
+      IDENTITY_SUSPECT_THRESHOLD: 55
+      IDENTITY_RETENTION_DAYS: 7
+      IDENTITY_PENDING_RETENTION_DAYS: 30
+      IDENTITY_MAX_ATTEMPTS: 5
     volumes:
       - backend_storage:/app/storage
       - backend_logs:/app/storage/logs
@@ -266,6 +326,56 @@ services:
       - exam-network
     ports:
       - "9000:8080"
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: exam-backend-scheduler
+    container_name: exam-scheduler
+    restart: unless-stopped
+    entrypoint:
+      - sh
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          if php artisan identity:ensure-schema; then break; fi
+          echo "waiting for database... ($$i)"
+          sleep 2
+        done
+        exec php artisan schedule:work
+    environment:
+      APP_NAME: ExamSystem
+      APP_ENV: local
+      APP_KEY: base64:dGVzdGluZ2tleWZvcnRoZWV4YW1zeXN0ZW0=
+      APP_DEBUG: true
+      APP_URL: http://localhost:9000
+      LOG_CHANNEL: stack
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: exam_system
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      CACHE_DRIVER: file
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: sync
+      IDENTITY_FACE_DRIVER: local
+      IDENTITY_PASS_THRESHOLD: 80
+      IDENTITY_SUSPECT_THRESHOLD: 55
+      IDENTITY_RETENTION_DAYS: 7
+      IDENTITY_PENDING_RETENTION_DAYS: 30
+      IDENTITY_MAX_ATTEMPTS: 5
+    volumes:
+      - backend_storage:/app/storage
+      - backend_logs:/app/storage/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    networks:
+      - exam-network
 
   frontend:
     build:

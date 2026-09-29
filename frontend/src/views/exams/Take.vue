@@ -87,6 +87,11 @@ onMounted(async () => {
     timeRemaining.value = examPaper.value.total_time * 60
     startTimer()
   } catch (e) {
+    if (e.response?.data?.identity_required) {
+      alert(e.response.data.message || '请先完成证件与人脸核验', '需要入场核验', 'warning')
+      router.replace(`/exams/${route.params.id}/verify`)
+      return
+    }
     alert('获取考试信息失败', '考试加载失败', 'error')
     router.push('/exams')
   } finally {

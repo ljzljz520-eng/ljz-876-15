@@ -85,9 +85,21 @@ node scripts/verify-readme-test-credentials.mjs --manifest qa/.runtime/test-cred
 ## 核心功能
 1. 用户认证：注册、登录、退出。
 2. 题库管理：题目增删改查、分类管理。
-3. 试卷管理：试卷创建、编辑、题目关联。
+3. 试卷管理：试卷创建、编辑、题目关联、是否开启入场核验开关。
 4. 在线考试：开始考试、提交答卷、自动评分。
 5. 成绩统计：个人成绩与管理端统计数据。
+6. 入场身份核验：证件照上传 + 摄像头人脸采集，自动比对后分为"通过 / 疑似 / 失败"三种状态；疑似由监考老师人工确认，仅通过（或人工确认通过）的学生可进入考试。
+
+### 身份核验与隐私保护
+- **三态状态机**：`passed`（机器通过）、`suspected`（疑似，进入监考队列等待人工确认）、`failed`（失败，学生可重新提交）；人工复核结果为 `approved` / `rejected`。
+- **准入闸门**：`exams/{paper}/start` 与拉取试题接口都会校验是否存在有效放行记录，未核验、疑似待确认、人工拒绝、失败均无法开考。
+- **材料用途限定**：证件照与人脸照保存在 Laravel 私有磁盘（`storage/app/identity-verifications/`，非 public 目录），仅与"本次考试"关联；前端拿不到任何真实存储路径。
+- **禁止后台随意浏览**：监考端查看材料必须走鉴权接口 `GET /proctor/identity-verifications/{id}/media/{type}`，响应带 `no-store`，且**每次查看都写入审计日志**（操作人、时间、IP、UA）。
+- **保留期清理**：交卷后材料保留至"考试结束 + `IDENTITY_RETENTION_DAYS`（默认 7 天）"，由调度任务 `identity:purge-expired` 每日 03:15 删除文件并把记录匿名化（清除证件号密文、姓名、路径），只留最小审计骨架；管理员可在"核验日志"页追溯。
+- **证件号加密**：身份证/证件号码使用 Laravel Encrypter（AES）加密落库，接口仅返回脱敏值（如 `1101************1234`）。
+- **人脸比对驱动可插拔**：`App\Services\FaceMatch\Contracts\FaceMatcher`，默认 `local` 为基于 GD 的图像相似度演示实现（**非真正人脸识别，仅限演示环境**）；生产环境在 `AppServiceProvider` 中绑定云厂商人脸核身驱动（含活体检测 + 1:1 比对）即可，阈值通过 `IDENTITY_PASS_THRESHOLD` / `IDENTITY_SUSPECT_THRESHOLD` 配置。
+- **提交频率控制**：同一考生同一场考试最多提交 `IDENTITY_MAX_ATTEMPTS`（默认 5）次，疑似待确认期间禁止重复提交。
+- 可用 `docker compose exec backend php artisan identity:purge-expired --dry-run` 预览到期记录。
 
 ## 角色权限
 | 角色 | 可访问模块 |
@@ -119,7 +131,7 @@ docker compose exec backend sh -lc "curl -s -X POST http://localhost:8080/api/au
 - CORS 与基础限流已配置。
 
 ## 数据库说明
-当前初始化后包含 10 张核心表（含用户、题目、试卷、考试记录、答案记录等）。
+初始化后包含 12 张核心表（含用户、题目、试卷、考试记录、答案记录、证件人脸核验记录、核验审计日志等）。
 
 详见：
 - `docs/Database.sql`

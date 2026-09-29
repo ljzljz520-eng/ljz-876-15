@@ -20,6 +20,7 @@
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">题目数</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">总分</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">时长</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">入场核验</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
           </tr>
         </thead>
@@ -30,6 +31,20 @@
             <td class="px-6 py-4">{{ paper.question_count }} 题</td>
             <td class="px-6 py-4">{{ paper.total_score }} 分</td>
             <td class="px-6 py-4">{{ paper.total_time }} 分钟</td>
+            <td class="px-6 py-4">
+              <button
+                @click="toggleIdentityCheck(paper)"
+                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                :class="paper.identity_check_enabled === false ? 'bg-gray-300' : 'bg-indigo-600'"
+                :title="paper.identity_check_enabled === false ? '当前免核验，点击启用人脸核验' : '当前要求证件+人脸核验，点击关闭'"
+              >
+                <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                  :class="paper.identity_check_enabled === false ? 'translate-x-1' : 'translate-x-6'"></span>
+              </button>
+              <span class="ml-2 text-xs" :class="paper.identity_check_enabled === false ? 'text-gray-400' : 'text-indigo-600'">
+                {{ paper.identity_check_enabled === false ? '免核验' : '核验' }}
+              </span>
+            </td>
             <td class="px-6 py-4 space-x-2">
               <button @click="openQuestionModal(paper)" class="text-green-600 hover:text-green-900">管理题目</button>
               <button @click="openEditModal(paper)" class="text-indigo-600 hover:text-indigo-900">编辑</button>
@@ -71,6 +86,10 @@
                     </select>
                   </div>
                 </div>
+                <label class="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" v-model="form.identity_check_enabled" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                  进入考试前要求上传证件并完成摄像头人脸比对（疑似由监考老师人工确认）
+                </label>
               </div>
             </div>
             <div class="px-6 py-4 border-t flex justify-end space-x-3">
@@ -197,7 +216,8 @@ const defaultForm = {
   title: '',
   description: '',
   total_time: 60,
-  type: 'fixed'
+  type: 'fixed',
+  identity_check_enabled: true
 }
 
 const form = ref({ ...defaultForm })
@@ -286,7 +306,8 @@ const openEditModal = (paper) => {
     title: paper.title,
     description: paper.description || '',
     total_time: paper.total_time,
-    type: paper.type
+    type: paper.type,
+    identity_check_enabled: paper.identity_check_enabled !== false
   }
   showModal.value = true
 }
@@ -334,6 +355,27 @@ const removeQuestion = async (questionId) => {
     console.error('Failed to remove question:', e)
     if (!shouldUseGlobalErrorModal(e.response?.status)) {
       toast.error(e.response?.data?.error || '移除失败')
+    }
+  }
+}
+
+const toggleIdentityCheck = async (paper) => {
+  const nextValue = paper.identity_check_enabled === false
+  try {
+    await api.put(`/exam-papers/${paper.id}`, {
+      title: paper.title,
+      description: paper.description || '',
+      total_time: paper.total_time,
+      type: paper.type,
+      status: paper.status ? 1 : 0,
+      identity_check_enabled: nextValue ? 1 : 0
+    })
+    paper.identity_check_enabled = nextValue
+    toast.success(nextValue ? '已开启入场核验' : '已关闭入场核验')
+  } catch (e) {
+    console.error('Failed to toggle identity check:', e)
+    if (!shouldUseGlobalErrorModal(e.response?.status)) {
+      toast.error(e.response?.data?.error || '设置失败')
     }
   }
 }

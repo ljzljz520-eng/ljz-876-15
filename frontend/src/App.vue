@@ -115,13 +115,29 @@
               >
                 题库管理
               </router-link>
-              <router-link 
-                v-if="authStore.isTeacher" 
-                to="/exam-papers" 
+              <router-link
+                v-if="authStore.isTeacher"
+                to="/exam-papers"
                 class="nav-link"
                 :class="{ 'nav-link-active': $route.path === '/exam-papers' }"
               >
                 试卷管理
+              </router-link>
+              <router-link
+                v-if="authStore.isTeacher"
+                to="/proctor/identity-reviews"
+                class="nav-link"
+                :class="{ 'nav-link-active': $route.path === '/proctor/identity-reviews' }"
+              >
+                核验复核
+              </router-link>
+              <router-link
+                v-if="authStore.isAdmin"
+                to="/admin/identity-audit-logs"
+                class="nav-link"
+                :class="{ 'nav-link-active': $route.path === '/admin/identity-audit-logs' }"
+              >
+                核验日志
               </router-link>
               <router-link 
                 v-if="authStore.isAdmin" 
@@ -157,6 +173,8 @@
           <router-link to="/records" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/records' }">我的成绩</router-link>
           <router-link v-if="authStore.isTeacher" to="/questions" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/questions' }">题库管理</router-link>
           <router-link v-if="authStore.isTeacher" to="/exam-papers" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/exam-papers' }">试卷管理</router-link>
+          <router-link v-if="authStore.isTeacher" to="/proctor/identity-reviews" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/proctor/identity-reviews' }">核验复核</router-link>
+          <router-link v-if="authStore.isAdmin" to="/admin/identity-audit-logs" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/admin/identity-audit-logs' }">核验日志</router-link>
           <router-link v-if="authStore.isAdmin" to="/statistics" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/statistics' }">数据统计</router-link>
         </div>
       </div>

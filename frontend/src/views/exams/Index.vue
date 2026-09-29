@@ -26,9 +26,15 @@
             <span>考试时长</span>
             <span>{{ paper.total_time }} 分钟</span>
           </div>
+          <div class="flex justify-between">
+            <span>入场核验</span>
+            <span :class="paper.identity_check_enabled ? 'text-indigo-600 font-medium' : 'text-gray-400'">
+              {{ paper.identity_check_enabled === false ? '免核验' : '证件+人脸' }}
+            </span>
+          </div>
         </div>
         <button @click="startExam(paper)" class="mt-4 w-full bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700 transition-colors">
-          开始考试
+          {{ paper.identity_check_enabled === false ? '开始考试' : '开始考试（先核验）' }}
         </button>
       </div>
     </div>
@@ -39,10 +45,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../../api'
-import { useModal } from '../../composables/useModal'
 
 const router = useRouter()
-const { alert } = useModal()
 const examPapers = ref([])
 const loading = ref(true)
 
@@ -58,11 +62,7 @@ onMounted(async () => {
 })
 
 const startExam = async (paper) => {
-  try {
-    const response = await api.post(`/exams/${paper.id}/start`)
-    router.push(`/exams/${paper.id}`)
-  } catch (e) {
-    alert(e.response?.data?.message || '开始考试失败', '开始考试', 'error')
-  }
+  // 进入考试前必须先完成证件与人脸核验（疑似需监考老师人工确认）
+  router.push(`/exams/${paper.id}/verify`)
 }
 </script>

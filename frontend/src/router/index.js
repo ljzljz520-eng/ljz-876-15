@@ -27,6 +27,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/exams/:id/verify',
+    name: 'ExamVerify',
+    component: () => import('../views/exams/Verify.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/exams/:id',
     name: 'TakeExam',
     component: () => import('../views/exams/Take.vue'),
@@ -49,6 +55,18 @@ const routes = [
     name: 'ExamPapers',
     component: () => import('../views/exam-papers/Index.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'teacher'] }
+  },
+  {
+    path: '/proctor/identity-reviews',
+    name: 'IdentityReviews',
+    component: () => import('../views/proctor/IdentityReviews.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'teacher'] }
+  },
+  {
+    path: '/admin/identity-audit-logs',
+    name: 'IdentityAuditLogs',
+    component: () => import('../views/admin/IdentityAuditLogs.vue'),
+    meta: { requiresAuth: true, roles: ['admin'] }
   },
   {
     path: '/statistics',

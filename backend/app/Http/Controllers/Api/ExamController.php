@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExamPaper;
 use App\Models\ExamRecord;
 use App\Models\ExamRecordAnswer;
+use App\Models\IdentityVerification;
 use App\Models\Question;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -26,6 +27,43 @@ class ExamController extends Controller
 
     public function start(Request $request, ExamPaper $examPaper)
     {
+        // 准入闸门：试卷要求核验时，必须存在"机器通过"或"疑似经人工确认通过"的记录
+        $verification = null;
+        if ($examPaper->identity_check_enabled) {
+            $admittedVerification = IdentityVerification::admitted()
+                ->where('user_id', $request->user()->id)
+                ->where('exam_paper_id', $examPaper->id)
+                ->latest('id')
+                ->first();
+
+            if (!$admittedVerification) {
+                $latest = IdentityVerification::where('user_id', $request->user()->id)
+                    ->where('exam_paper_id', $examPaper->id)
+                    ->whereNull('purged_at')
+                    ->latest('id')
+                    ->first();
+
+                $reason = !$latest
+                    ? '进入考试前请先完成证件与人脸核验'
+                    : match (true) {
+                        $latest->status === IdentityVerification::STATUS_SUSPECTED
+                            && $latest->review_result === null
+                            => '核验结果为疑似，正在等待监考老师人工确认',
+                        $latest->review_result === IdentityVerification::REVIEW_REJECTED
+                            => '核验未通过监考老师人工确认，无法进入考试',
+                        default => '人脸核验未通过，请重新核验',
+                    };
+
+                return response()->json([
+                    'message' => $reason,
+                    'identity_required' => true,
+                    'verification' => $latest?->toSafeArray(),
+                ], 403);
+            }
+
+            $verification = $admittedVerification;
+        }
+
         $existingRecord = ExamRecord::where('user_id', $request->user()->id)
             ->where('exam_paper_id', $examPaper->id)
             ->where('status', 'in_progress')
@@ -44,6 +82,11 @@ class ExamController extends Controller
             'start_time' => now(),
             'status' => 'in_progress',
         ]);
+
+        // 核验记录关联本次考试（材料即"本次考试专用"的凭证）
+        if ($verification) {
+            $verification->update(['exam_record_id' => $record->id]);
+        }
 
         $questions = $examPaper->questions()->get();
 
@@ -65,6 +108,7 @@ class ExamController extends Controller
                 'title' => $examPaper->title,
                 'total_time' => $examPaper->total_time,
                 'total_score' => $examPaper->total_score,
+                'identity_check_enabled' => (bool) $examPaper->identity_check_enabled,
             ],
             'questions' => $questionsData,
         ]);
@@ -72,6 +116,21 @@ class ExamController extends Controller
 
     public function getQuestions(Request $request, ExamPaper $examPaper)
     {
+        // 防止绕过开考闸门直接拉题：试卷要求核验时必须存在一条有效放行记录
+        if ($examPaper->identity_check_enabled) {
+            $admitted = IdentityVerification::admitted()
+                ->where('user_id', $request->user()->id)
+                ->where('exam_paper_id', $examPaper->id)
+                ->exists();
+
+            if (!$admitted) {
+                return response()->json([
+                    'message' => '请先完成证件与人脸核验',
+                    'identity_required' => true,
+                ], 403);
+            }
+        }
+
         $record = ExamRecord::where('user_id', $request->user()->id)
             ->where('exam_paper_id', $examPaper->id)
             ->where('status', 'in_progress')
@@ -96,6 +155,7 @@ class ExamController extends Controller
                 'title' => $examPaper->title,
                 'total_time' => $examPaper->total_time,
                 'total_score' => $examPaper->total_score,
+                'identity_check_enabled' => (bool) $examPaper->identity_check_enabled,
             ],
             'questions' => $questionsData,
         ]);
@@ -148,6 +208,18 @@ class ExamController extends Controller
             'score' => $totalScore,
             'status' => 'graded',
         ]);
+
+        // 交卷后启动保留期计时：材料保留至"考试结束 + 保留天数"，到期自动清理
+        $retentionDays = (int) config('identity.retention_days', 7);
+        IdentityVerification::where(function ($q) use ($record) {
+            $q->where('exam_record_id', $record->id)
+                ->orWhere(function ($q2) use ($record) {
+                    $q2->where('user_id', $record->user_id)
+                        ->where('exam_paper_id', $record->exam_paper_id);
+                });
+        })
+            ->whereNull('purged_at')
+            ->update(['expires_at' => $record->end_time->copy()->addDays($retentionDays)]);
 
         return response()->json([
             'message' => '提交成功',

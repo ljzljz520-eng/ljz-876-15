@@ -40,6 +40,7 @@ class ExamPaperController extends Controller
             'description' => 'nullable|string',
             'total_time' => 'nullable|integer|min:1',
             'type' => 'nullable|in:fixed,random',
+            'identity_check_enabled' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -53,6 +54,7 @@ class ExamPaperController extends Controller
             'total_time' => $request->total_time ?? 60,
             'question_count' => 0,
             'type' => $request->type ?? 'fixed',
+            'identity_check_enabled' => $request->boolean('identity_check_enabled', true),
             'created_by' => $request->user()->id,
             'status' => 1,
         ]);
@@ -90,19 +92,26 @@ class ExamPaperController extends Controller
             'total_time' => 'nullable|integer|min:1',
             'type' => 'nullable|in:fixed,random',
             'status' => 'nullable|boolean',
+            'identity_check_enabled' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $examPaper->update([
+        $data = [
             'title' => $request->title,
             'description' => $request->description,
             'total_time' => $request->total_time,
             'type' => $request->type,
             'status' => $request->status ?? $examPaper->status,
-        ]);
+        ];
+
+        if ($request->has('identity_check_enabled')) {
+            $data['identity_check_enabled'] = $request->boolean('identity_check_enabled');
+        }
+
+        $examPaper->update($data);
 
         return response()->json([
             'message' => '更新成功',
