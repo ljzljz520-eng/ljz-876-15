@@ -59,9 +59,19 @@ onMounted(async () => {
 
 const startExam = async (paper) => {
   try {
-    const response = await api.post(`/exams/${paper.id}/start`)
+    // 考前身份核验门禁：未通过核验先跳转核验页（证件照 + 人脸比对）
+    const verifyRes = await api.get(`/exams/${paper.id}/verification`)
+    if (!verifyRes.data.effective_passed) {
+      router.push(`/exams/${paper.id}/verify`)
+      return
+    }
+    await api.post(`/exams/${paper.id}/start`)
     router.push(`/exams/${paper.id}`)
   } catch (e) {
+    if (e.response?.data?.code === 'VERIFICATION_REQUIRED') {
+      router.push(`/exams/${paper.id}/verify`)
+      return
+    }
     alert(e.response?.data?.message || '开始考试失败', '开始考试', 'error')
   }
 }

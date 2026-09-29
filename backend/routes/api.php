@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ExamController;
 use App\Http\Controllers\Api\ExamPaperController;
 use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\ScoreController;
+use App\Http\Controllers\Api\VerificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('api')->prefix('auth')->group(function () {
@@ -45,6 +46,18 @@ Route::middleware(['api', 'auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::post('/{examPaper}/submit', [ExamController::class, 'submit']);
         Route::get('/records', [ExamController::class, 'myRecords']);
         Route::get('/records/{record}', [ExamController::class, 'showRecord']);
+
+        // 考前身份核验（学生）
+        Route::post('/{examPaper}/verification', [VerificationController::class, 'store']);
+        Route::get('/{examPaper}/verification', [VerificationController::class, 'status']);
+    });
+
+    // 身份核验人工确认（监考老师/管理员）
+    Route::prefix('verifications')->group(function () {
+        Route::get('/pending', [VerificationController::class, 'pending']);
+        Route::get('/history', [VerificationController::class, 'history']);
+        Route::post('/{verification}/review', [VerificationController::class, 'review']);
+        Route::get('/{verification}/image/{type}', [VerificationController::class, 'image']);
     });
 
     Route::prefix('scores')->group(function () {

@@ -33,6 +33,18 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/exams/:id/verify',
+    name: 'ExamVerify',
+    component: () => import('../views/verification/Verify.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/verifications/review',
+    name: 'VerificationReview',
+    component: () => import('../views/verification/Review.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'teacher'] }
+  },
+  {
     path: '/records',
     name: 'Records',
     component: () => import('../views/exams/Records.vue'),

@@ -21,6 +21,9 @@ RUN apk add --no-cache \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) pdo pdo_mysql bcmath gd zip
 
+# 放宽上传限制（身份核验需上传证件照/人脸抓拍）
+RUN printf 'upload_max_filesize=10M\npost_max_size=12M\n' > /usr/local/etc/php/conf.d/zz-uploads.ini
+
 # 复制 Composer
 COPY --from=composer /usr/bin/composer /usr/bin/composer
 

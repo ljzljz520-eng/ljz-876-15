@@ -115,17 +115,25 @@
               >
                 题库管理
               </router-link>
-              <router-link 
-                v-if="authStore.isTeacher" 
-                to="/exam-papers" 
+              <router-link
+                v-if="authStore.isTeacher"
+                to="/exam-papers"
                 class="nav-link"
                 :class="{ 'nav-link-active': $route.path === '/exam-papers' }"
               >
                 试卷管理
               </router-link>
-              <router-link 
-                v-if="authStore.isAdmin" 
-                to="/statistics" 
+              <router-link
+                v-if="authStore.isTeacher"
+                to="/verifications/review"
+                class="nav-link"
+                :class="{ 'nav-link-active': $route.path === '/verifications/review' }"
+              >
+                核验审核
+              </router-link>
+              <router-link
+                v-if="authStore.isAdmin"
+                to="/statistics"
                 class="nav-link"
                 :class="{ 'nav-link-active': $route.path === '/statistics' }"
               >
@@ -157,6 +165,7 @@
           <router-link to="/records" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/records' }">我的成绩</router-link>
           <router-link v-if="authStore.isTeacher" to="/questions" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/questions' }">题库管理</router-link>
           <router-link v-if="authStore.isTeacher" to="/exam-papers" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/exam-papers' }">试卷管理</router-link>
+          <router-link v-if="authStore.isTeacher" to="/verifications/review" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/verifications/review' }">核验审核</router-link>
           <router-link v-if="authStore.isAdmin" to="/statistics" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': $route.path === '/statistics' }">数据统计</router-link>
         </div>
       </div>

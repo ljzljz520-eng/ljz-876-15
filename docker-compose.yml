@@ -214,6 +214,27 @@ services:
               INDEX idx_question_id (question_id)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='考生答案表';
 
+          CREATE TABLE IF NOT EXISTS exam_verifications (
+              id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              user_id BIGINT UNSIGNED NOT NULL COMMENT '考生ID',
+              exam_paper_id BIGINT UNSIGNED NOT NULL COMMENT '试卷ID',
+              id_card_path VARCHAR(255) NULL COMMENT '证件照存储路径(私有盘,清理后置空)',
+              face_image_path VARCHAR(255) NULL COMMENT '人脸抓拍存储路径(私有盘,清理后置空)',
+              similarity_score DECIMAL(5,4) DEFAULT NULL COMMENT '人脸比对相似度(0-1)',
+              status ENUM('passed', 'suspicious', 'failed') NOT NULL COMMENT '系统判定: passed-通过 suspicious-疑似 failed-失败',
+              review_status ENUM('approved', 'rejected') DEFAULT NULL COMMENT '人工复核结果(仅疑似单)',
+              reviewed_by BIGINT UNSIGNED DEFAULT NULL COMMENT '复核人(监考老师)ID',
+              reviewed_at TIMESTAMP NULL COMMENT '复核时间',
+              review_note VARCHAR(500) DEFAULT NULL COMMENT '复核备注',
+              purge_after TIMESTAMP NOT NULL COMMENT '材料保留截止时间(到期自动清理)',
+              purged_at TIMESTAMP NULL COMMENT '材料实际清理时间',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              INDEX idx_user_paper (user_id, exam_paper_id),
+              INDEX idx_status (status),
+              INDEX idx_purge_after (purge_after)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='考前身份核验表(材料仅本次考试使用,按保留期清理)';
+
           CREATE TABLE IF NOT EXISTS cache (
               `key` VARCHAR(255) NOT NULL PRIMARY KEY,
               `value` MEDIUMTEXT NOT NULL,
@@ -254,6 +275,12 @@ services:
       CACHE_DRIVER: file
       SESSION_DRIVER: file
       QUEUE_CONNECTION: sync
+      # 考前身份核验配置
+      FACE_PASS_THRESHOLD: 0.85
+      FACE_SUSPICIOUS_THRESHOLD: 0.60
+      VERIFICATION_RETENTION_HOURS: 24
+      VERIFICATION_MAX_RETENTION_HOURS: 72
+      VERIFICATION_MAX_UPLOAD_KB: 5120
     volumes:
       - backend_storage:/app/storage
       - backend_logs:/app/storage/logs

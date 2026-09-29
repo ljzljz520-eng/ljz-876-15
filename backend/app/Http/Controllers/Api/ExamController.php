@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\ExamPaper;
 use App\Models\ExamRecord;
 use App\Models\ExamRecordAnswer;
+use App\Models\ExamVerification;
 use App\Models\Question;
+use App\Services\VerificationPurgeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -36,6 +38,11 @@ class ExamController extends Controller
                 'message' => '您已经开始这场考试',
                 'exam_record' => $existingRecord,
             ]);
+        }
+
+        // 考前身份核验门禁：未通过核验（含人工确认通过）不得进入考试
+        if ($resp = $this->ensureVerified($request, $examPaper)) {
+            return $resp;
         }
 
         $record = ExamRecord::create([
@@ -72,6 +79,11 @@ class ExamController extends Controller
 
     public function getQuestions(Request $request, ExamPaper $examPaper)
     {
+        // 防止绕过开始接口直接拉取试题
+        if ($resp = $this->ensureVerified($request, $examPaper)) {
+            return $resp;
+        }
+
         $record = ExamRecord::where('user_id', $request->user()->id)
             ->where('exam_paper_id', $examPaper->id)
             ->where('status', 'in_progress')
@@ -149,6 +161,10 @@ class ExamController extends Controller
             'status' => 'graded',
         ]);
 
+        // 考试结束：核验材料进入保留期倒计时，到期自动清理
+        app(VerificationPurgeService::class)
+            ->schedulePurgeAfterExamFinished($request->user()->id, $examPaper->id);
+
         return response()->json([
             'message' => '提交成功',
             'score' => $totalScore,
@@ -179,6 +195,28 @@ class ExamController extends Controller
         return response()->json([
             'record' => $record,
         ]);
+    }
+
+    /**
+     * 考前身份核验门禁：要求考生已通过系统自动核验或人工确认。
+     */
+    protected function ensureVerified(Request $request, ExamPaper $examPaper)
+    {
+        $verification = ExamVerification::where('user_id', $request->user()->id)
+            ->where('exam_paper_id', $examPaper->id)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($verification && $verification->isEffective()) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => '请先完成考前身份核验（证件照 + 人脸比对）后再进入考试',
+            'code' => 'VERIFICATION_REQUIRED',
+            'verification_status' => $verification?->status,
+            'review_status' => $verification?->review_status,
+        ], 403);
     }
 
     protected function checkAnswer(Question $question, string $userAnswer): bool

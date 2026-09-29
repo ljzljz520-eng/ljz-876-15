@@ -87,6 +87,10 @@ onMounted(async () => {
     timeRemaining.value = examPaper.value.total_time * 60
     startTimer()
   } catch (e) {
+    if (e.response?.data?.code === 'VERIFICATION_REQUIRED') {
+      router.push(`/exams/${route.params.id}/verify`)
+      return
+    }
     alert('获取考试信息失败', '考试加载失败', 'error')
     router.push('/exams')
   } finally {
